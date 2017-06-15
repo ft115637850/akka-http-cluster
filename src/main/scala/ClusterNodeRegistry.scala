@@ -2,9 +2,12 @@ package cep.cluster.poc
 
 import java.util.UUID
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorIdentity, ActorLogging, ActorRef, Props}
+import akka.cluster.{Cluster, Member}
 import akka.cluster.pubsub.{DistributedPubSub, DistributedPubSubMediator}
 
+
+import scala.collection.immutable.SortedSet
 import scala.concurrent.duration.{Deadline, FiniteDuration}
 import scala.util.Success
 
@@ -30,6 +33,7 @@ object ClusterNodeRegistry {
 class ClusterNodeRegistry(workTimeout: FiniteDuration) extends Actor with ActorLogging {
 
   import ClusterNodeRegistry._
+  import LookUpActor._
 
   val mediator = DistributedPubSub(context.system).mediator
   private var nodes = Map[String, WorkerState]()
@@ -58,5 +62,10 @@ class ClusterNodeRegistry(workTimeout: FiniteDuration) extends Actor with ActorL
     case WorkComplete(nodeId, workId) =>
       val load = workLoads(nodeId)
       workLoads += (nodeId -> (load - 1))
+    case RunnerStatus(nodeId) =>
+      val cluster = Cluster(context.system);
+      val members = cluster.state.members.toList;
+      val looker = context.system.actorOf(LookUpActor.prop(nodeId, members, sender()))
+      looker ! LookMeUp()
   }
 }

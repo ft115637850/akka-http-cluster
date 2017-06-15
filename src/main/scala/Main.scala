@@ -1,21 +1,19 @@
 package cep.cluster.poc
 
+import java.util.UUID
+
 import akka.actor.{ActorSystem, PoisonPill}
-import akka.actor.Props
 import akka.cluster.singleton.{ClusterSingletonManager, ClusterSingletonManagerSettings, ClusterSingletonProxy, ClusterSingletonProxySettings}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import akka.stream.ActorMaterializer
 import akka.pattern._
-import com.typesafe.config.{Config, ConfigFactory}
+import akka.stream.ActorMaterializer
+import akka.util.Timeout
+import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.duration._
 import scala.io.StdIn
-import java.util.Date
-
-import akka.util.Timeout
-
 import scala.util.{Failure, Success}
 
 /**
@@ -26,10 +24,9 @@ object Main {
   def main(args: Array[String]): Unit = {
     val port = args(0).toInt
     startALEInstance(port)
-    startWebServer(port+10)
+    startWebServer(port + 10)
   }
 
-  def workTimeout = 10.seconds
   def startALEInstance(port: Int): Unit = {
     val conf = ConfigFactory.parseString("akka.remote.netty.tcp.port=" + port).
       withFallback(ConfigFactory.load())
@@ -48,8 +45,10 @@ object Main {
         singletonManagerPath = "/user/registry"
       ),
       name = "registryProxy")
-    system.actorOf(ClusterNode.props(registryProxy), "alenode")
+    system.actorOf(ClusterNode.props(registryProxy), UUID.randomUUID().toString)
   }
+
+  def workTimeout = 10.seconds
 
   def startWebServer(port: Int): Unit = {
     implicit val system = ActorSystem("automation-akka-http")
@@ -67,21 +66,30 @@ object Main {
       get {
         path("send") {
           implicit val timeout = Timeout(5.seconds)
-          onComplete(registryProxy ? Work){
+          onComplete(registryProxy ? Work) {
             case Success(res) => complete(StatusCodes.Accepted, s"workID:$res")
             case Failure(t) => complete(StatusCodes.InternalServerError, t.getMessage)
           }
         }
       } ~
-    get{
-      pathPrefix("query" / JavaUUID) { workId =>
-        implicit val timeout = Timeout(5.seconds)
-        onComplete(registryProxy ? WorkStatus(workId.toString, None)) {
-          case Success(res) => complete(StatusCodes.Accepted, s"workID:$res")
-          case Failure(t) => complete(StatusCodes.InternalServerError, t.getMessage)
+        get {
+          pathPrefix("query" / JavaUUID) { workId =>
+            implicit val timeout = Timeout(5.seconds)
+            onComplete(registryProxy ? WorkStatus(workId.toString, None)) {
+              case Success(res) => complete(StatusCodes.Accepted, s"workID:$res")
+              case Failure(t) => complete(StatusCodes.InternalServerError, t.getMessage)
+            }
+          }
+        } ~
+        get {
+          pathPrefix("runner" / JavaUUID) { nodeId =>
+            implicit val timeout = Timeout(5.seconds)
+            onComplete(registryProxy ? RunnerStatus(nodeId.toString)) {
+              case Success(res) => complete(StatusCodes.Accepted, s"workID:$res")
+              case Failure(t) => complete(StatusCodes.InternalServerError, t.getMessage)
+            }
+          }
         }
-      }
-    }
 
     val bindingFuture = Http().bindAndHandle(route, "localhost", port)
 

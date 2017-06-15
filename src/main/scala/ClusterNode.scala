@@ -20,18 +20,20 @@ object ClusterNode {
   case class WorkComplete(result: Any)
 }
 class ClusterNode(registryProxy: ActorRef, registerInterval: FiniteDuration) extends Actor with ActorLogging {
-  val NodeId = UUID.randomUUID().toString
   import context.dispatcher
   val registerTask = context.system.scheduler.schedule(0.seconds, registerInterval, registryProxy,
-    RegisterNode(NodeId))
+    RegisterNode(self.path.name))
 
+  override def preStart() : Unit = {
+    log.info("ClusterNode path:" + self.path)
+  }
   override def receive: Receive = {
     case Work(workId) =>
       val runerId = scala.util.Random.alphanumeric.take(8).mkString
       val aRunner = context.system.actorOf(AutomationRunner.prop, runerId)
       aRunner ! RunAutomation(workId)
     case WorkComplete(_, workId) =>
-      registryProxy ! WorkComplete(NodeId, workId)
-      log.info("work {} is complete on Node {}", workId, NodeId)
+      registryProxy ! WorkComplete(self.path.name, workId)
+      log.info("work {} is complete on Node {}", workId, self.path.name)
   }
 }

@@ -9,4 +9,5 @@ import akka.actor.ActorRef
 
 case class Work(workId:String)
 case class WorkStatus(workId:String, ref: Option[ActorRef])
+case class RunnerStatus(NodeId:String)
 case class WorkComplete(NodeId:String, workId:String)

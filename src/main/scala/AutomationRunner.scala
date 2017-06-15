@@ -34,6 +34,9 @@ class AutomationRunner extends Actor with LoggingFSM[AutomationRunnerState, Opti
   mediator ! DistributedPubSubMediator.Subscribe(ClusterNodeRegistry.WorkStatusTopic, self)
   startWith(AutomationStates.Idling, Some(AutomationRunData(workId = "", currentStep = 0, None)))
 
+  override def preStart() : Unit = {
+    log.info("AutomationRunner path:" + self.path)
+  }
   when (AutomationStates.Idling){
     case Event(r:RunAutomation, Some(d)) =>
       goto(AutomationStates.Running) using(Some(AutomationRunData(workId = r.workId, currentStep = 1, nodeRef = Some(sender()))))
